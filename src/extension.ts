@@ -1,17 +1,134 @@
 import * as vscode from "vscode";
+import ollama from "ollama";
 
 export function activate(context: vscode.ExtensionContext) {
-  console.log('"fireship-ext" is now active!');
-
   const disposable = vscode.commands.registerCommand(
-    "fireship-ext.hellonearth",
+    "chat-deep-seek.start",
     () => {
-      vscode.window.showInformationMessage("Welcome to Hell on Earth!");
-      vscode.window.showErrorMessage("Welcome to Hell on Earth!");
+      const panel = vscode.window.createWebviewPanel(
+        "deepChat",
+        "Deep Seek Chat",
+        vscode.ViewColumn.One,
+        { enableScripts: true }
+      );
+      panel.webview.html = getWebviewContent();
+
+      panel.webview.onDidReceiveMessage(async (message: any) => {
+        if (message.command === "chat") {
+          const userPrompt = message.text;
+          let responseText = "";
+
+          try {
+            const streamResponse = await ollama.chat({
+              model: "deepseek-r1:7b", // set your model version here
+              messages: [{ role: "user", content: userPrompt }],
+              stream: true,
+            });
+            // goes through and processes the response
+            for await (const part of streamResponse) {
+              responseText += part.message.content;
+              panel.webview.postMessage({
+                command: "chatResponse",
+                text: responseText,
+              });
+            }
+          } catch (err) {
+            console.error(err);
+            panel.webview.postMessage({
+              command: "chatResponse",
+              text: `Error: ${String(
+                err
+              )} occured while processing the request`,
+            });
+          }
+        }
+      });
     }
   );
-
   context.subscriptions.push(disposable);
+}
+
+function getWebviewContent(): string {
+  return `
+  <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Deep Seek Chat</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+                margin: 0;
+                background-color:rgb(11, 10, 10);
+            }
+            .container {
+                background: black;
+                border-radius: 5px;
+                padding: 20px;
+                max-width: 400px;
+                width: 100%;
+            }
+            textarea {
+                width: 100%;
+                padding: 10px;
+                margin-bottom: 10px;
+                resize: vertical;
+                min-height: 50px;
+            }
+            button {
+                background: #007bff;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                cursor: pointer;
+                border-radius: 5px;
+            }
+            #stopBtn {
+                background: #dc3545;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                cursor: pointer;
+                border-radius: 5px;
+            }
+            #stopBtn:hover {
+                background: #c82333;
+            }
+            button:hover {
+                background: #0056b3;
+            }
+        </style>
+    </head>
+   <body>
+    <div class="container">
+        <h2>Deep Seek Chat</h2>
+            <textarea id="prompt" placeholder="Type your message..."></textarea><br />
+            <button id="askBtn">Ask</button>
+        <div id="response"></div>
+    </div>
+    <script>
+        const vscode = acquireVsCodeApi();
+        document.getElementById('askBtn').addEventListener('click', () => {
+            const text = document.getElementById('prompt').value;
+            vscode.postMessage({
+                command: 'chat',
+                text
+            });
+        });
+        window.addEventListener('message', event => {
+            const {command, text} = event.data;
+            if(command === 'chatResponse') {
+                document.getElementById('response').innerText = text;
+            }
+        });
+    </script>
+    </body>
+    </html>`;
 }
 
 export function deactivate() {}
