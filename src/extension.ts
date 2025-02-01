@@ -13,6 +13,7 @@ export function activate(context: vscode.ExtensionContext) {
       );
       panel.webview.html = getWebviewContent();
 
+      let isStopped = false;
       panel.webview.onDidReceiveMessage(async (message: any) => {
         if (message.command === "chat") {
           const userPrompt = message.text;
@@ -20,12 +21,15 @@ export function activate(context: vscode.ExtensionContext) {
 
           try {
             const streamResponse = await ollama.chat({
-              model: "deepseek-r1:7b", // set your model version here
+              model: "deepseek-r1:14b", // set your model version here
               messages: [{ role: "user", content: userPrompt }],
               stream: true,
             });
             // goes through and processes the response
             for await (const part of streamResponse) {
+              if ((isStopped == true)) {
+                break;
+              }
               responseText += part.message.content;
               panel.webview.postMessage({
                 command: "chatResponse",
@@ -41,6 +45,9 @@ export function activate(context: vscode.ExtensionContext) {
               )} occured while processing the request`,
             });
           }
+        } else if (message.command === "stop") {
+          isStopped = true;
+          panel.webview.postMessage({ command: "stop" });
         }
       });
     }
@@ -88,7 +95,7 @@ function getWebviewContent(): string {
                 cursor: pointer;
                 border-radius: 5px;
             }
-            #stopBtn {
+            #stpTalking {
                 background: #dc3545;
                 color: white;
                 border: none;
@@ -96,7 +103,7 @@ function getWebviewContent(): string {
                 cursor: pointer;
                 border-radius: 5px;
             }
-            #stopBtn:hover {
+            #stpTalking:hover {
                 background: #c82333;
             }
             button:hover {
@@ -109,6 +116,7 @@ function getWebviewContent(): string {
         <h2>Deep Seek Chat</h2>
             <textarea id="prompt" placeholder="Type your message..."></textarea><br />
             <button id="askBtn">Ask</button>
+            <button id="stpTalking">Stop</button>
         <div id="response"></div>
     </div>
     <script>
@@ -120,12 +128,23 @@ function getWebviewContent(): string {
                 text
             });
         });
+        document.getElementById('stpTalking').addEventListener('click', () => {
+         const text = document.getElementById('prompt').value;
+         vscode.postMessage({
+            command: 'stop',
+            text
+         });
+        });
+
         window.addEventListener('message', event => {
             const {command, text} = event.data;
             if(command === 'chatResponse') {
                 document.getElementById('response').innerText = text;
+            } else if(command === 'stop') {
+              document.getElementById('response').innerText = 'Conversation stopped'
             }
         });
+
     </script>
     </body>
     </html>`;
